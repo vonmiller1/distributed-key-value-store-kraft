@@ -10,14 +10,17 @@ import (
 )
 
 func (s *Server) PutHandler(w http.ResponseWriter, r *http.Request) {
-	r.ParseForm()
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form", http.StatusBadRequest)
+		return
+	}
 	key := r.Form.Get("key")
 	val := r.Form.Get("val")
 	if key == "" || val == "" {
-		http.Error(w, "error key or val is empty", http.StatusOK)
+		http.Error(w, "error key or val is empty", http.StatusBadRequest)
 		return
 	}
-    log.Printf("[HTTP-PUT] key %s was put into this node", key)
+	log.Printf("[HTTP-PUT] key %s was put into this node", key)
 
 	payload := fsm.Payload{
 		OP:    fsm.PUT,
@@ -39,7 +42,7 @@ func (s *Server) PutHandler(w http.ResponseWriter, r *http.Request) {
 
 	_, ok := applyFuture.Response().(*fsm.ApplyResponse)
 	if !ok {
-		w.Write([]byte("error raft response"))
+		http.Error(w, "error raft response", http.StatusInternalServerError)
 		return
 	}
 
@@ -47,10 +50,13 @@ func (s *Server) PutHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) GetHandler(w http.ResponseWriter, r *http.Request) {
-	r.ParseForm()
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form", http.StatusBadRequest)
+		return
+	}
 	key := r.Form.Get("key")
 	if key == "" {
-		http.Error(w, "error key is empty", http.StatusOK)
+		http.Error(w, "error key is empty", http.StatusBadRequest)
 		return
 	}
 
@@ -62,10 +68,10 @@ func (s *Server) GetHandler(w http.ResponseWriter, r *http.Request) {
 
 	value, err := fsmInstance.Get(key)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
-    log.Printf("[HTTP-GET] key %s was found on this node", key)
+	log.Printf("[HTTP-GET] key %s was found on this node", key)
 
 	var valueBytes []byte
 	if valueStr, ok := value.(string); ok {
@@ -84,13 +90,16 @@ func (s *Server) GetHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) DeleteHandler(w http.ResponseWriter, r *http.Request) {
-	r.ParseForm()
-	key := r.Form.Get("key")
-	if key == "" {
-		http.Error(w, "error key is empty", http.StatusOK)
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form", http.StatusBadRequest)
 		return
 	}
-    log.Printf("[HTTP-DELETE] key %s was found on this node", key)
+	key := r.Form.Get("key")
+	if key == "" {
+		http.Error(w, "error key is empty", http.StatusBadRequest)
+		return
+	}
+	log.Printf("[HTTP-DELETE] key %s was found on this node", key)
 
 	payload := fsm.Payload{
 		OP:  fsm.DEL,
@@ -111,7 +120,7 @@ func (s *Server) DeleteHandler(w http.ResponseWriter, r *http.Request) {
 
 	_, ok := applyFuture.Response().(*fsm.ApplyResponse)
 	if !ok {
-		w.Write([]byte("error raft response"))
+		http.Error(w, "error raft response", http.StatusInternalServerError)
 		return
 	}
 	w.Write([]byte("ok"))
