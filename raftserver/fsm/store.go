@@ -63,15 +63,17 @@ type ApplyResponse struct {
 func (fsm FSM) Apply(log *raft.Log) interface{} {
 	switch log.Type {
 	case raft.LogCommand:
-		var payload = Payload{}
+		var payload Payload
 		if err := json.Unmarshal(log.Data, &payload); err != nil {
-			fmt.Fprintf(os.Stderr, "error marshalling payload %s\n", err.Error())
-			return nil
+			fmt.Fprintf(os.Stderr, "error unmarshalling payload: %s\n", err.Error())
+			return &ApplyResponse{Error: err}
 		}
 
 		switch payload.OP {
 		case PUT:
-			fsm.Put(payload.Key, payload.Value)
+			if err := fsm.Put(payload.Key, payload.Value); err != nil {
+				return &ApplyResponse{Error: err}
+			}
 			return &ApplyResponse{
 				Error: nil,
 				Data:  payload.Value,
@@ -89,22 +91,35 @@ func (fsm FSM) Apply(log *raft.Log) interface{} {
 				Data:  value,
 			}
 		case DEL:
-			fsm.Delete(payload.Key)
+			if err := fsm.Delete(payload.Key); err != nil {
+				return &ApplyResponse{Error: err}
+			}
 			return &ApplyResponse{
 				Error: nil,
 				Data:  nil,
 			}
+		default:
+			return &ApplyResponse{Error: fmt.Errorf("unknown op: %s", payload.OP)}
 		}
 	}
-	fmt.Fprintf(os.Stderr, "raft log command type:%s\n", raft.LogCommand)
+	fmt.Fprintf(os.Stderr, "ignored raft log type: %d\n", log.Type)
 	return nil
 }
 
 func (fsm FSM) Snapshot() (raft.FSMSnapshot, error) {
-	return newSnapshot()
+	return newKVSnapshot(fsm.kv_store)
 }
 
-func (fsm FSM) Restore(rc io.ReadCloser) error {
+func (fsm *FSM) Restore(rc io.ReadCloser) error {
+	defer rc.Close()
+	var data map[string]string
+	if err := json.NewDecoder(rc).Decode(&data); err != nil {
+		return err
+	}
+	fsm.kv_store = &sync.Map{}
+	for k, v := range data {
+		fsm.kv_store.Store(k, v)
+	}
 	return nil
 }
 
