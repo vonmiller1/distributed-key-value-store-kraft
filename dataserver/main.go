@@ -26,11 +26,12 @@ const (
 )
 
 var (
-	nodeID   = flag.String("node_id", "node_1", "raft node id")
-	port     = flag.Int("port", 8001, "http port")
-	raftaddr = flag.String("raft_addr", "localhost:18001", "raft address")
-	shardID  = flag.Int("shard_id", 1, "shard id")
-	storedir = flag.String("store_dir", "", "db dir")
+	nodeID          = flag.String("node_id", "node_1", "raft node id")
+	port            = flag.Int("port", 8001, "http port")
+	raftaddr        = flag.String("raft_addr", "localhost:18001", "raft address")
+	shardID         = flag.Int("shard_id", 1, "shard id")
+	storedir        = flag.String("store_dir", "", "db dir")
+	configServerURL = flag.String("config_server_url", "http://127.0.0.1:3001", "config server base URL for leader updates")
 )
 
 func LeaderObserver(raftInstance *raft.Raft, configServerURL string) {
@@ -41,18 +42,16 @@ func LeaderObserver(raftInstance *raft.Raft, configServerURL string) {
 			if currentAddress != lastAddress {
 				lastAddress = currentAddress
 
-				// Check if this node is the leader
 				if raftInstance.State() == raft.Leader {
-					// Send request to the config server only if this node is the leader
 					newLeaderInfo := fmt.Sprintf("shardID=%d&shardAddress=%s", *shardID, currentAddress)
 					resp, err := http.Post(configServerURL+"/newleader", "application/x-www-form-urlencoded", strings.NewReader(newLeaderInfo))
 					if err != nil {
 						fmt.Println("Error sending request to config server:", err)
-					} else {
-						defer resp.Body.Close()
-						body, _ := io.ReadAll(resp.Body)
-						fmt.Println("Config server response:", string(body))
+						continue
 					}
+					body, _ := io.ReadAll(resp.Body)
+					resp.Body.Close()
+					fmt.Println("Config server response:", string(body))
 				}
 			}
 			time.Sleep(1 * time.Second)
@@ -85,7 +84,6 @@ func main() {
 
 	fsmStore := fsm.NewFSM()
 
-	// Raft configuration
 	store, err := raftboltdb.NewBoltStore(filepath.Join(dir, "raft.db"))
 	if err != nil {
 		log.Fatal(err)
@@ -125,16 +123,16 @@ func main() {
 		},
 	})
 
-	server := server.New(raftServer, fsmStore)
-	go LeaderObserver(raftServer, "http://127.0.0.1:3001")
+	srv := server.New(raftServer, fsmStore)
+	go LeaderObserver(raftServer, strings.TrimRight(*configServerURL, "/"))
 
-	http.HandleFunc("/get", server.GetHandler)
-	http.HandleFunc("/put", server.PutHandler)
-	http.HandleFunc("/delete", server.DeleteHandler)
+	http.HandleFunc("/get", srv.GetHandler)
+	http.HandleFunc("/put", srv.PutHandler)
+	http.HandleFunc("/delete", srv.DeleteHandler)
 
-	http.HandleFunc("/raft/join", server.RaftJoin)
-	http.HandleFunc("/raft/status", server.RaftStatus)
-	http.HandleFunc("/raft/leave", server.RaftLeave)
+	http.HandleFunc("/raft/join", srv.RaftJoin)
+	http.HandleFunc("/raft/status", srv.RaftStatus)
+	http.HandleFunc("/raft/leave", srv.RaftLeave)
 
 	fmt.Println("Server listening on: ", *port)
 	err = http.ListenAndServe(fmt.Sprintf(":%d", *port), nil)
