@@ -1,6 +1,7 @@
 #!/bin/bash
 
 LOGDIR=logs
+mkdir -p "$LOGDIR"
 
 run_configserver () {
     echo "Starting configserver nodes"
@@ -80,4 +81,3 @@ run_all () {
 }
 
 (trap "echo 'Killing all processes...'; kill 0" SIGINT; run_all)
-
