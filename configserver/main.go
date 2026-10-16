@@ -48,7 +48,7 @@ func NewConfigServer(raft *raft.Raft, fsm raft.FSM) *ConfigServer {
 }
 
 func (cs *ConfigServer) ConfigHandler(w http.ResponseWriter, r *http.Request) {
-    log.Println("[HTTP] config is requested")
+	log.Println("[HTTP] config is requested")
 
 	fsmInstance, ok := cs.fsm.(*fsm.FSM)
 	if !ok {
@@ -83,8 +83,16 @@ func (cs *ConfigServer) ConfigHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (cs *ConfigServer) AddShardHandler(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form", http.StatusBadRequest)
+		return
+	}
 	shardID := r.FormValue("shardID")
 	shardAddress := r.FormValue("shardAddress")
+	if shardID == "" || shardAddress == "" {
+		http.Error(w, "shardID and shardAddress are required", http.StatusBadRequest)
+		return
+	}
 
 	payload := fsm.Payload{
 		OP:    fsm.PUT,
@@ -106,7 +114,7 @@ func (cs *ConfigServer) AddShardHandler(w http.ResponseWriter, r *http.Request) 
 
 	_, ok := applyFuture.Response().(*fsm.ApplyResponse)
 	if !ok {
-		w.Write([]byte("error raft response"))
+		http.Error(w, "error raft response", http.StatusInternalServerError)
 		return
 	}
 
@@ -114,10 +122,17 @@ func (cs *ConfigServer) AddShardHandler(w http.ResponseWriter, r *http.Request) 
 }
 
 func (cs *ConfigServer) NewLeaderHandler(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form", http.StatusBadRequest)
+		return
+	}
 	shardID := r.FormValue("shardID")
 	shardAddress := r.FormValue("shardAddress")
+	if shardID == "" || shardAddress == "" {
+		http.Error(w, "shardID and shardAddress are required", http.StatusBadRequest)
+		return
+	}
 
-	// Process the new leader info
 	fmt.Printf("New leader address: %s, shard ID: %s\n", shardAddress, shardID)
 
 	payload := fsm.Payload{
@@ -140,7 +155,7 @@ func (cs *ConfigServer) NewLeaderHandler(w http.ResponseWriter, r *http.Request)
 
 	_, ok := applyFuture.Response().(*fsm.ApplyResponse)
 	if !ok {
-		w.Write([]byte("error raft response"))
+		http.Error(w, "error raft response", http.StatusInternalServerError)
 		return
 	}
 
@@ -172,7 +187,6 @@ func main() {
 
 	fsmStore := fsm.NewFSM()
 
-	// Raft configuration
 	store, err := raftboltdb.NewBoltStore(filepath.Join(dir, "raft.db"))
 	if err != nil {
 		log.Fatal(err)
