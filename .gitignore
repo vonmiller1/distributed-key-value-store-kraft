@@ -2,10 +2,7 @@
 logs/
 *.log
 
-# Go build outputs
-/dataserver
-/configserver
-/router
+# Go build outputs (keep source packages configserver/, dataserver/, router/)
 *.exe
 *.test
 
