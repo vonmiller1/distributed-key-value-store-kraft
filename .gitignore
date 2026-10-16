@@ -1,0 +1,13 @@
+# Local runtime artifacts
+logs/
+*.log
+
+# Go build outputs
+/dataserver
+/configserver
+/router
+*.exe
+*.test
+
+# Raft / BoltDB temp stores
+cs442_*/
